@@ -21,8 +21,6 @@ typedef struct Sprite {
 // #Global
 Sprite sprites[SPRITE_COUNT] = {0};
 
-inline Sprite* sprite_get(Sprite_Tag tag) { return &sprites[tag]; }
-
 void sprite_load(
     Sprite* sprite, string path, Vector2 dimentions, Allocator allocator
 ) {
@@ -93,47 +91,55 @@ typedef struct Entity {
     Entity_Tag entity_tag;
 } Entity;
 
-typedef struct Entity_Pool {
-    Entity* buffer;
+typedef struct Entity_Pool_Header {
     u64 capacity;
     u64 length;
     Allocator allocator;
-} Entity_Pool;
+} Entity_Pool_Header;
 
 typedef struct World {
-    Entity_Pool* entity_pool;
+    Entity* entity_pool;
 } World;
 
 // #Global
 World world = {0};
 
+#define ENTITY_POOL_HEADER ((Entity_Pool_Header*)world.entity_pool - 1)
+inline u64 entity_pool_length() { return ENTITY_POOL_HEADER->length; }
+inline u64 entity_pool_capacity() { return ENTITY_POOL_HEADER->capacity; }
+
 void world_init(u64 entity_pool_capacity, Allocator allocator) {
     u64 allocation_size
-        = sizeof(Entity_Pool) + entity_pool_capacity * sizeof(Entity);
-    world.entity_pool = (Entity_Pool*)alloc(allocator, allocation_size);
-    memset(world.entity_pool, 0, allocation_size);
+        = sizeof(Entity_Pool_Header) + entity_pool_capacity * sizeof(Entity);
+    Entity_Pool_Header* entity_pool_header = alloc(allocator, allocation_size);
+    memset(entity_pool_header, 0, allocation_size);
 
-    world.entity_pool->buffer = (Entity*)(world.entity_pool + 1);
-    world.entity_pool->capacity = entity_pool_capacity;
-    world.entity_pool->length = 0;
-    world.entity_pool->allocator = allocator;
+    entity_pool_header->allocator = allocator;
+    entity_pool_header->capacity = entity_pool_capacity;
+    entity_pool_header->length = 0;
+
+    world.entity_pool = (Entity*)(entity_pool_header + 1);
 }
 
 void world_deinit() {
-    dealloc(world.entity_pool->allocator, world.entity_pool);
+    dealloc(ENTITY_POOL_HEADER->allocator, ENTITY_POOL_HEADER);
     world.entity_pool = NULL;
 }
 
 Entity* entity_fetch() {
     assert(
-        world.entity_pool->length < world.entity_pool->capacity,
+        entity_pool_length() < entity_pool_capacity(),
         "Not enought space in the entity pool."
     );
 
-    Entity* entity = &world.entity_pool->buffer[world.entity_pool->length];
-    world.entity_pool->length++;
+    Entity* entity = &world.entity_pool[entity_pool_length()];
+    ENTITY_POOL_HEADER->length++;
 
     return entity;
+}
+
+inline Sprite* entity_sprite(Entity* entity) {
+    return &sprites[entity->sprite_tag];
 }
 
 Entity* player_init() {
@@ -165,7 +171,7 @@ Entity* tree_init() {
 void entity_render(Entity* entity) {
     Matrix4 xform = m4_scalar(1.0f);
     xform = m4_translate(xform, v3(v2_expand(entity->position), 0.0f));
-    Sprite* sprite = sprite_get(entity->sprite_tag);
+    Sprite* sprite = entity_sprite(entity);
     draw_image_xform(sprite->image, xform, sprite->dimentions, COLOR_WHITE);
 }
 
@@ -201,7 +207,7 @@ int entry(int argc, char** argv) {
     f32 player_speed = 100.0f;
     Entity* player = player_init();
     // Centered in x axis
-    player->position.x = -sprite_get(player->sprite_tag)->dimentions.x / 2.0f;
+    player->position.x = -entity_sprite(player)->dimentions.x / 2.0f;
 
     for (u8 i = 0; i < 100; i++) {
         tree_init();
@@ -261,8 +267,8 @@ int entry(int argc, char** argv) {
             player->position, v2_mulf(player_move_direction, player_speed * dt)
         );
 
-        for (u64 i = 0; i < world.entity_pool->length; i++) {
-            Entity* entity = &world.entity_pool->buffer[i];
+        for (u64 i = 0; i < entity_pool_length(); i++) {
+            Entity* entity = &world.entity_pool[i];
             entity_render(entity);
         }
 
