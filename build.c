@@ -29,6 +29,4 @@ typedef struct Context_Extra {
 // Ooga booga needs to be included AFTER configuration and BEFORE the program
 // code
 #include "oogabooga/oogabooga.c"
-
-// Compuctory entry point
-#include "compuctory/entry_compuctory.c"
+#include "compuctory/compuctory.c"
