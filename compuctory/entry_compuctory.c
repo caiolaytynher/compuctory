@@ -130,7 +130,7 @@ Entity* entity_fetch() {
         "Not enought space in the entity pool."
     );
 
-    Entity* entity = &world.entity_pool->buffer[world.entity_pool->length + 1];
+    Entity* entity = &world.entity_pool->buffer[world.entity_pool->length];
     world.entity_pool->length++;
 
     return entity;
@@ -160,6 +160,13 @@ Entity* tree_init() {
     );
 
     return tree;
+}
+
+void entity_render(Entity* entity) {
+    Matrix4 xform = m4_scalar(1.0f);
+    xform = m4_translate(xform, v3(v2_expand(entity->position), 0.0f));
+    Sprite* sprite = sprite_get(entity->sprite_tag);
+    draw_image_xform(sprite->image, xform, sprite->dimentions, COLOR_WHITE);
 }
 
 Entity* rock_init() {
@@ -193,8 +200,13 @@ int entry(int argc, char** argv) {
 
     f32 player_speed = 100.0f;
     Entity* player = player_init();
-    // Centered on x axis
+    // Centered in x axis
     player->position.x = -sprite_get(player->sprite_tag)->dimentions.x / 2.0f;
+
+    for (u8 i = 0; i < 100; i++) {
+        tree_init();
+        rock_init();
+    }
 
     // Make it 1:1 to pixel size
     Matrix4 projection = m4_make_orthographic_projection(
@@ -203,10 +215,11 @@ int entry(int argc, char** argv) {
     );
 
     // Zoom to the appropriate viewport
-    f32 viewport = 240.0f;
-    Matrix4 view = m4_make_scale(
-        v3(viewport / window.width, viewport / window.width, 1.0f)
-    );
+    f32 viewport_width = 240.0f;
+    // It's flipped because of ooga booga
+    f32 view_scale_factor = viewport_width / window.width;
+    Matrix4 view
+        = m4_make_scale(v3(view_scale_factor, view_scale_factor, 1.0f));
 
     f64 dt = 0.0;
     f64 last_time = os_get_current_time_in_seconds();
@@ -248,15 +261,10 @@ int entry(int argc, char** argv) {
             player->position, v2_mulf(player_move_direction, player_speed * dt)
         );
 
-        Matrix4 player_xform = m4_scalar(1.0f);
-        player_xform = m4_translate(
-            player_xform, v3(player->position.x, player->position.y, 0.0f)
-        );
-
-        draw_image_xform(
-            sprite_get(player->sprite_tag)->image, player_xform,
-            sprite_get(player->sprite_tag)->dimentions, COLOR_WHITE
-        );
+        for (u64 i = 0; i < world.entity_pool->length; i++) {
+            Entity* entity = &world.entity_pool->buffer[i];
+            entity_render(entity);
+        }
 
         os_update();
         gfx_update();
