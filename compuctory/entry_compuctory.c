@@ -15,49 +15,66 @@ typedef enum Sprite_Tag {
 typedef struct Sprite {
     Vector2 dimentions;
     Gfx_Image* image;
+    Allocator allocator;
 } Sprite;
 
-void sprite_load_all(Sprite sprites[SPRITE_COUNT], Allocator allocator) {
-    sprites[SPRITE_UNKNOWN] = (Sprite){
-        .image
-        = load_image_from_disk(STR("assets/sprites/unknown.png"), allocator),
-        .dimentions = v2(5.0f, 7.0f),
-    };
-    sprites[SPRITE_PLAYER] = (Sprite){
-        .image
-        = load_image_from_disk(STR("assets/sprites/player.png"), allocator),
-        .dimentions = v2(7.0f, 6.0f),
-    };
-    sprites[SPRITE_TREE_1] = (Sprite){
-        .image
-        = load_image_from_disk(STR("assets/sprites/tree_1.png"), allocator),
-        .dimentions = v2(9.0f, 14.0f),
-    };
-    sprites[SPRITE_TREE_2] = (Sprite){
-        .image
-        = load_image_from_disk(STR("assets/sprites/tree_2.png"), allocator),
-        .dimentions = v2(9.0f, 13.0f),
-    };
-    sprites[SPRITE_TREE_3] = (Sprite){
-        .image
-        = load_image_from_disk(STR("assets/sprites/tree_3.png"), allocator),
-        .dimentions = v2(9.0f, 14.0f),
-    };
-    sprites[SPRITE_ROCK_1] = (Sprite){
-        .image
-        = load_image_from_disk(STR("assets/sprites/rock_1.png"), allocator),
-        .dimentions = v2(5.0f, 2.0f),
-    };
-    sprites[SPRITE_ROCK_2] = (Sprite){
-        .image
-        = load_image_from_disk(STR("assets/sprites/rock_2.png"), allocator),
-        .dimentions = v2(5.0f, 3.0f),
-    };
-    sprites[SPRITE_ROCK_3] = (Sprite){
-        .image
-        = load_image_from_disk(STR("assets/sprites/rock_3.png"), allocator),
-        .dimentions = v2(5.0f, 3.0f),
-    };
+// #Global
+Sprite sprites[SPRITE_COUNT] = {0};
+
+inline Sprite* sprite_get(Sprite_Tag tag) { return &sprites[tag]; }
+
+void sprite_load(
+    Sprite* sprite, string path, Vector2 dimentions, Allocator allocator
+) {
+    sprite->image = load_image_from_disk(path, allocator);
+    sprite->dimentions = dimentions;
+    sprite->allocator = allocator;
+}
+
+void sprite_unload(Sprite* sprite) {
+    dealloc(sprite->allocator, sprite->image);
+    sprite->image = NULL;
+}
+
+void sprite_load_all(Allocator allocator) {
+    sprite_load(
+        &sprites[SPRITE_UNKNOWN], STR("assets/sprites/unknown.png"),
+        v2(5.0f, 7.0f), allocator
+    );
+    sprite_load(
+        &sprites[SPRITE_PLAYER], STR("assets/sprites/player.png"),
+        v2(7.0f, 6.0f), allocator
+    );
+    sprite_load(
+        &sprites[SPRITE_TREE_1], STR("assets/sprites/tree_1.png"),
+        v2(9.0f, 14.0f), allocator
+    );
+    sprite_load(
+        &sprites[SPRITE_TREE_2], STR("assets/sprites/tree_2.png"),
+        v2(9.0f, 13.0f), allocator
+    );
+    sprite_load(
+        &sprites[SPRITE_TREE_3], STR("assets/sprites/tree_3.png"),
+        v2(9.0f, 14.0f), allocator
+    );
+    sprite_load(
+        &sprites[SPRITE_ROCK_1], STR("assets/sprites/rock_1.png"),
+        v2(5.0f, 2.0f), allocator
+    );
+    sprite_load(
+        &sprites[SPRITE_ROCK_2], STR("assets/sprites/rock_2.png"),
+        v2(5.0f, 3.0f), allocator
+    );
+    sprite_load(
+        &sprites[SPRITE_ROCK_3], STR("assets/sprites/rock_3.png"),
+        v2(5.0f, 3.0f), allocator
+    );
+}
+
+void sprite_unload_all() {
+    for (u64 i = 0; i < SPRITE_COUNT; i++) {
+        sprite_unload(&sprites[i]);
+    }
 }
 
 typedef enum Entity_Tag {
@@ -70,21 +87,96 @@ typedef enum Entity_Tag {
     ENTITY_COUNT,
 } Entity_Tag;
 
-typedef enum Entity_Flags {
-    FLAG_ENTITY_IS_INITIALIZED = 1 << 0,
-} Entity_Flags;
-
 typedef struct Entity {
     Vector2 position;
     Sprite_Tag sprite_tag;
     Entity_Tag entity_tag;
-    u8 flags;
 } Entity;
 
-void player_init(Entity* player) {
+typedef struct Entity_Pool {
+    Entity* buffer;
+    u64 capacity;
+    u64 length;
+    Allocator allocator;
+} Entity_Pool;
+
+typedef struct World {
+    Entity_Pool* entity_pool;
+} World;
+
+// #Global
+World world = {0};
+
+void world_init(u64 entity_pool_capacity, Allocator allocator) {
+    u64 allocation_size
+        = sizeof(Entity_Pool) + entity_pool_capacity * sizeof(Entity);
+    world.entity_pool = (Entity_Pool*)alloc(allocator, allocation_size);
+    memset(world.entity_pool, 0, allocation_size);
+
+    world.entity_pool->buffer = (Entity*)(world.entity_pool + 1);
+    world.entity_pool->capacity = entity_pool_capacity;
+    world.entity_pool->length = 0;
+    world.entity_pool->allocator = allocator;
+}
+
+void world_deinit() {
+    dealloc(world.entity_pool->allocator, world.entity_pool);
+    world.entity_pool = NULL;
+}
+
+Entity* entity_fetch() {
+    assert(
+        world.entity_pool->length < world.entity_pool->capacity,
+        "Not enought space in the entity pool."
+    );
+
+    Entity* entity = &world.entity_pool->buffer[world.entity_pool->length + 1];
+    world.entity_pool->length++;
+
+    return entity;
+}
+
+Entity* player_init() {
+    Entity* player = entity_fetch();
+
     player->entity_tag = ENTITY_PLAYER;
     player->sprite_tag = SPRITE_PLAYER;
-    player->flags |= FLAG_ENTITY_IS_INITIALIZED;
+
+    return player;
+}
+
+Entity* tree_init() {
+    Entity* tree = entity_fetch();
+
+    tree->entity_tag = ENTITY_TREE;
+    tree->sprite_tag = get_random_int_in_range(SPRITE_TREE_1, SPRITE_TREE_3);
+    tree->position = v2(
+        get_random_float32_in_range(
+            -(f32)window.width / 2.0f, (f32)window.width / 2.0f
+        ),
+        get_random_float32_in_range(
+            -(f32)window.height / 2.0f, (f32)window.height / 2.0f
+        )
+    );
+
+    return tree;
+}
+
+Entity* rock_init() {
+    Entity* rock = entity_fetch();
+
+    rock->entity_tag = ENTITY_ROCK;
+    rock->sprite_tag = get_random_int_in_range(SPRITE_ROCK_1, SPRITE_ROCK_3);
+    rock->position = v2(
+        get_random_float32_in_range(
+            -(f32)window.width / 2.0f, (f32)window.width / 2.0f
+        ),
+        get_random_float32_in_range(
+            -(f32)window.height / 2.0f, (f32)window.height / 2.0f
+        )
+    );
+
+    return rock;
 }
 
 int entry(int argc, char** argv) {
@@ -96,14 +188,13 @@ int entry(int argc, char** argv) {
     window.y = 90;
     window.clear_color = hex_to_rgba(0x1f262dff);
 
-    Sprite sprites[SPRITE_COUNT];
-    sprite_load_all(sprites, get_heap_allocator());
+    sprite_load_all(get_heap_allocator());
+    world_init(1024, get_heap_allocator());
 
     f32 player_speed = 100.0f;
-    Entity player = {0};
-    player_init(&player);
+    Entity* player = player_init();
     // Centered on x axis
-    player.position.x = -sprites[player.sprite_tag].dimentions.x / 2.0f;
+    player->position.x = -sprite_get(player->sprite_tag)->dimentions.x / 2.0f;
 
     // Make it 1:1 to pixel size
     Matrix4 projection = m4_make_orthographic_projection(
@@ -153,23 +244,26 @@ int entry(int argc, char** argv) {
         }
 
         player_move_direction = v2_normalize(player_move_direction);
-        player.position = v2_add(
-            player.position, v2_mulf(player_move_direction, player_speed * dt)
+        player->position = v2_add(
+            player->position, v2_mulf(player_move_direction, player_speed * dt)
         );
 
         Matrix4 player_xform = m4_scalar(1.0f);
         player_xform = m4_translate(
-            player_xform, v3(player.position.x, player.position.y, 0.0f)
+            player_xform, v3(player->position.x, player->position.y, 0.0f)
         );
 
         draw_image_xform(
-            sprites[player.sprite_tag].image, player_xform,
-            sprites[player.sprite_tag].dimentions, COLOR_WHITE
+            sprite_get(player->sprite_tag)->image, player_xform,
+            sprite_get(player->sprite_tag)->dimentions, COLOR_WHITE
         );
 
         os_update();
         gfx_update();
     }
+
+    sprite_unload_all();
+    world_deinit();
 
     return 0;
 }
