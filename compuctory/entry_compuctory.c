@@ -1,3 +1,92 @@
+typedef enum Sprite_Tag {
+    SPRITE_UNKNOWN,
+
+    SPRITE_PLAYER,
+    SPRITE_TREE_1,
+    SPRITE_TREE_2,
+    SPRITE_TREE_3,
+    SPRITE_ROCK_1,
+    SPRITE_ROCK_2,
+    SPRITE_ROCK_3,
+
+    SPRITE_COUNT,
+} Sprite_Tag;
+
+typedef struct Sprite {
+    Vector2 dimentions;
+    Gfx_Image* image;
+} Sprite;
+
+void sprite_load_all(Sprite sprites[SPRITE_COUNT], Allocator allocator) {
+    sprites[SPRITE_UNKNOWN] = (Sprite){
+        .image
+        = load_image_from_disk(STR("assets/sprites/unknown.png"), allocator),
+        .dimentions = v2(5.0f, 7.0f),
+    };
+    sprites[SPRITE_PLAYER] = (Sprite){
+        .image
+        = load_image_from_disk(STR("assets/sprites/player.png"), allocator),
+        .dimentions = v2(7.0f, 6.0f),
+    };
+    sprites[SPRITE_TREE_1] = (Sprite){
+        .image
+        = load_image_from_disk(STR("assets/sprites/tree_1.png"), allocator),
+        .dimentions = v2(9.0f, 14.0f),
+    };
+    sprites[SPRITE_TREE_2] = (Sprite){
+        .image
+        = load_image_from_disk(STR("assets/sprites/tree_2.png"), allocator),
+        .dimentions = v2(9.0f, 13.0f),
+    };
+    sprites[SPRITE_TREE_3] = (Sprite){
+        .image
+        = load_image_from_disk(STR("assets/sprites/tree_3.png"), allocator),
+        .dimentions = v2(9.0f, 14.0f),
+    };
+    sprites[SPRITE_ROCK_1] = (Sprite){
+        .image
+        = load_image_from_disk(STR("assets/sprites/rock_1.png"), allocator),
+        .dimentions = v2(5.0f, 2.0f),
+    };
+    sprites[SPRITE_ROCK_2] = (Sprite){
+        .image
+        = load_image_from_disk(STR("assets/sprites/rock_2.png"), allocator),
+        .dimentions = v2(5.0f, 3.0f),
+    };
+    sprites[SPRITE_ROCK_3] = (Sprite){
+        .image
+        = load_image_from_disk(STR("assets/sprites/rock_3.png"), allocator),
+        .dimentions = v2(5.0f, 3.0f),
+    };
+}
+
+typedef enum Entity_Tag {
+    ENTITY_UNKNOWN,
+
+    ENTITY_PLAYER,
+    ENTITY_TREE,
+    ENTITY_ROCK,
+
+    ENTITY_COUNT,
+} Entity_Tag;
+
+typedef enum Entity_Flags {
+    FLAG_ENTITY_IS_INITIALIZED = 1 << 0,
+} Entity_Flags;
+
+typedef struct Entity {
+    Vector2 position;
+    Sprite_Tag sprite_tag;
+    Entity_Tag entity_tag;
+    u8 flags;
+} Entity;
+
+void player_init(Entity* player) {
+    player->entity_tag = ENTITY_PLAYER;
+    player->sprite_tag = SPRITE_PLAYER;
+    player->flags |= FLAG_ENTITY_IS_INITIALIZED;
+}
+
 int entry(int argc, char** argv) {
     window.title = STR("Compuctory");
     window.scaled_width = 1280; // We need to set the scaled size if we want to
@@ -7,13 +96,14 @@ int entry(int argc, char** argv) {
     window.y = 90;
     window.clear_color = hex_to_rgba(0x1f262dff);
 
-    Vector2 sprite_size = v2(8.0f, 8.0f);
-    Gfx_Image* player = load_image_from_disk(
-        STR("assets/sprites/player.png"), get_heap_allocator()
-    );
-    // Centered on x axis
-    Vector2 player_position = v2(-sprite_size.x / 2.0f, 0.0f);
+    Sprite sprites[SPRITE_COUNT];
+    sprite_load_all(sprites, get_heap_allocator());
+
     f32 player_speed = 100.0f;
+    Entity player = {0};
+    player_init(&player);
+    // Centered on x axis
+    player.position.x = -sprites[player.sprite_tag].dimentions.x / 2.0f;
 
     // Make it 1:1 to pixel size
     Matrix4 projection = m4_make_orthographic_projection(
@@ -63,16 +153,19 @@ int entry(int argc, char** argv) {
         }
 
         player_move_direction = v2_normalize(player_move_direction);
-        player_position = v2_add(
-            player_position, v2_mulf(player_move_direction, player_speed * dt)
+        player.position = v2_add(
+            player.position, v2_mulf(player_move_direction, player_speed * dt)
         );
 
         Matrix4 player_xform = m4_scalar(1.0f);
         player_xform = m4_translate(
-            player_xform, v3(player_position.x, player_position.y, 0.0f)
+            player_xform, v3(player.position.x, player.position.y, 0.0f)
         );
 
-        draw_image_xform(player, player_xform, sprite_size, COLOR_WHITE);
+        draw_image_xform(
+            sprites[player.sprite_tag].image, player_xform,
+            sprites[player.sprite_tag].dimentions, COLOR_WHITE
+        );
 
         os_update();
         gfx_update();

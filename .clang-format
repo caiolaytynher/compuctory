@@ -4,6 +4,7 @@ IndentWidth: 4
 PointerAlignment: Left
 AlignAfterOpenBracket: BlockIndent
 BreakBeforeBinaryOperators: All
+# Cpp11BracedListStyle: true
 # BinPackArguments: false
 ---
 
