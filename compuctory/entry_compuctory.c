@@ -1,121 +1,6 @@
 #include "sprite.c"
-
-typedef enum Entity_Tag {
-    ENTITY_UNKNOWN,
-
-    ENTITY_PLAYER,
-    ENTITY_TREE,
-    ENTITY_ROCK,
-
-    ENTITY_COUNT,
-} Entity_Tag;
-
-typedef struct Entity {
-    Vector2 position;
-    Sprite_Tag sprite_tag;
-    Entity_Tag entity_tag;
-} Entity;
-
-typedef struct Entity_Pool_Header {
-    u64 capacity;
-    u64 length;
-    Allocator allocator;
-} Entity_Pool_Header;
-
-typedef struct World {
-    Entity* entity_pool;
-} World;
-
-// #Global
-World world = {0};
-
-#define ENTITY_POOL_HEADER ((Entity_Pool_Header*)world.entity_pool - 1)
-inline u64 entity_pool_length() { return ENTITY_POOL_HEADER->length; }
-inline u64 entity_pool_capacity() { return ENTITY_POOL_HEADER->capacity; }
-
-void world_init(u64 entity_pool_capacity, Allocator allocator) {
-    u64 allocation_size
-        = sizeof(Entity_Pool_Header) + entity_pool_capacity * sizeof(Entity);
-    Entity_Pool_Header* entity_pool_header = alloc(allocator, allocation_size);
-    memset(entity_pool_header, 0, allocation_size);
-
-    entity_pool_header->allocator = allocator;
-    entity_pool_header->capacity = entity_pool_capacity;
-    entity_pool_header->length = 0;
-
-    world.entity_pool = (Entity*)(entity_pool_header + 1);
-}
-
-void world_deinit() {
-    dealloc(ENTITY_POOL_HEADER->allocator, ENTITY_POOL_HEADER);
-    world.entity_pool = NULL;
-}
-
-Entity* entity_fetch() {
-    assert(
-        entity_pool_length() < entity_pool_capacity(),
-        "Not enought space in the entity pool."
-    );
-
-    Entity* entity = &world.entity_pool[entity_pool_length()];
-    ENTITY_POOL_HEADER->length++;
-
-    return entity;
-}
-
-inline Sprite* entity_sprite(Entity* entity) {
-    return &sprites[entity->sprite_tag];
-}
-
-Entity* player_init() {
-    Entity* player = entity_fetch();
-
-    player->entity_tag = ENTITY_PLAYER;
-    player->sprite_tag = SPRITE_PLAYER;
-
-    return player;
-}
-
-Entity* tree_init() {
-    Entity* tree = entity_fetch();
-
-    tree->entity_tag = ENTITY_TREE;
-    tree->sprite_tag = get_random_int_in_range(SPRITE_TREE_1, SPRITE_TREE_3);
-    tree->position = v2(
-        get_random_float32_in_range(
-            -(f32)window.width / 2.0f, (f32)window.width / 2.0f
-        ),
-        get_random_float32_in_range(
-            -(f32)window.height / 2.0f, (f32)window.height / 2.0f
-        )
-    );
-
-    return tree;
-}
-
-void entity_render(Entity* entity) {
-    Matrix4 xform = m4_scalar(1.0f);
-    xform = m4_translate(xform, v3(v2_expand(entity->position), 0.0f));
-    Sprite* sprite = entity_sprite(entity);
-    draw_image_xform(sprite->image, xform, sprite->dimentions, COLOR_WHITE);
-}
-
-Entity* rock_init() {
-    Entity* rock = entity_fetch();
-
-    rock->entity_tag = ENTITY_ROCK;
-    rock->sprite_tag = get_random_int_in_range(SPRITE_ROCK_1, SPRITE_ROCK_3);
-    rock->position = v2(
-        get_random_float32_in_range(
-            -(f32)window.width / 2.0f, (f32)window.width / 2.0f
-        ),
-        get_random_float32_in_range(
-            -(f32)window.height / 2.0f, (f32)window.height / 2.0f
-        )
-    );
-
-    return rock;
-}
+#include "entity.c"
+#include "world.c"
 
 int entry(int argc, char** argv) {
     window.title = STR("Compuctory");
@@ -130,13 +15,13 @@ int entry(int argc, char** argv) {
     world_init(1024, get_heap_allocator());
 
     f32 player_speed = 100.0f;
-    Entity* player = player_init();
+    Entity* player = world_create_player();
     // Centered in x axis
-    player->position.x = -entity_sprite(player)->dimentions.x / 2.0f;
+    player->position.x = -entity_get_sprite(player)->dimentions.x / 2.0f;
 
     for (u8 i = 0; i < 100; i++) {
-        tree_init();
-        rock_init();
+        world_create_tree();
+        world_create_rock();
     }
 
     // Make it 1:1 to pixel size
@@ -192,8 +77,8 @@ int entry(int argc, char** argv) {
             player->position, v2_mulf(player_move_direction, player_speed * dt)
         );
 
-        for (u64 i = 0; i < entity_pool_length(); i++) {
-            Entity* entity = &world.entity_pool[i];
+        for (u64 i = 0; i < world.entities->length; i++) {
+            Entity* entity = &world.entities->buffer[i];
             entity_render(entity);
         }
 
